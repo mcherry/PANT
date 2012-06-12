@@ -1,0 +1,50 @@
+  (P)ortable (A)rduino (N)etwork (T)ool
+  
+  Checks for the basic functionality of a working network. Tests DHCP assignment,
+  ability to ping gateway and dns server, dns lookup, and ability to ping
+  internet address.
+  
+  This was designed on a Arduino Uno Ethernet board but should work on a regular
+  Uno + Ethernet Shield.
+  
+  The button circuit was modeled after tutorials from Adafruit:
+  http://www.ladyada.net/learn/arduino/lesson5.html
+  
+  The current design uses a 16x2 LCD panel hooked to a I2C backpack. More info
+  here: http://www.ladyada.net/products/i2cspilcdbackpack/
+  
+  info@inditech.org
+  
+  Version 3.2.1.4
+    Officially changed name to (P)ortable (A)rduino (N)etwork (T)ool or PANT
+    Changed version identifier to include hardware and software versions
+    Re-added display of proc temp and mac address
+    Fixed menu display code
+    Rewrote ping function to handle single or continuous test
+    Added function to determine even or odd numbers
+    Added subnet ping (ip calculation code by Eric Brundick <spirilis@linux.com)
+    Added soft reset option
+    Added SuperSecretMenu with drain battery option to be 1337
+    Misc code optimizations to reduce size
+      26404 Bytes Compiles
+      Arduino IDE 1.0.1
+  
+  Version 1.3
+    Changed several if statements to switch case
+    Removed use of String class
+    Removed display of proc temp and mac address
+    Added #define CANCEL, STATUS_OK, STATUS_GO, and STATUS_FAIL
+    Misc code optimizations
+      24382 Bytes Compiled
+      Arduino IDE 1.0.1
+  
+  Version 1.2
+    Added #define LONG_DELAY and SHORT_DELAY
+    Changed wait between pings to SHORT_DELAY+150ms
+      25950 Bytes Compiled
+      Arduino IDE 1.0.1
+  
+  Version 1.1
+    Initial release
+      25950 Bytes Compiled
+      Arduino IDE 1.0.1
