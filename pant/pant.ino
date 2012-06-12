@@ -16,6 +16,11 @@
   
   info@inditech.org
   
+  Version 3.2.1.5
+    Fixed IP display bug in host discovery
+      26458 Bytes Compiled
+      Arduino IDE 1.0.1
+  
   Version 3.2.1.4
     Officially changed name to (P)ortable (A)rduino (N)etwork (T)ool or PANT
     Changed version identifier to include hardware and software versions
@@ -683,7 +688,7 @@ void aboutMenu()
     switch (menuPosition)
     {
       case 0:
-        sprintf(line0, "PANT Version");
+        //sprintf(line0, "PANT Version");
         sprintf(line1, "%s", PANT_VERSION);
         break;
       
@@ -828,10 +833,10 @@ void hostDiscovery()
 {
   int cursorpos = 0;
   
-  boolean iptest;
-  boolean hostcheck;
+  boolean iptest, hostcheck;
   
   unsigned long hostcount = 0;
+  unsigned long pingedhosts = 0;
   
   //char buffer[17];
   
@@ -860,8 +865,8 @@ void hostDiscovery()
      
       break;
     }
-     
-    sprintf(line1, "%d.%d.%d.%d", validIp[0], validIp[1], validIp[2], validIp[3]);
+    
+    sprintf(line1, "%d.%d.%d.%d        ", validIp[0], validIp[1], validIp[2], validIp[3]);
     lcdPrint(0, 1, line1);
   
     ICMPPing ping(pingSocket);
@@ -875,6 +880,8 @@ void hostDiscovery()
       sprintf(line0, "%d", hostcount);
       lcdPrint(6, 0, line0);
     }
+    
+    pingedhosts++;
       
     //hostcheck = checkHostUp(validIp);
     //if (hostcheck == true)
@@ -888,13 +895,16 @@ void hostDiscovery()
     
     // get next ip in the range
     iptest = iplist_next(validIp);
+    
     cursorpos++;
   }
   
   // show total number of found hosts
-  sprintf(line0, "Found %d", hostcount);
+  sprintf(line0, "Found %d of", hostcount);
+  sprintf(line1, "%d hosts", pingedhosts);
+  
   lcdPrint(0, 0, line0, true);
-  lcdPrint(0, 1, "hosts");
+  lcdPrint(0, 1, line1);
 
   // wait for user to press back button  
   while (1)
