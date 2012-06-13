@@ -1,20 +1,12 @@
 /*
   (P)ortable (A)rduino (N)etwork (T)ool
   
-  Checks for the basic functionality of a working network. Tests DHCP assignment,
-  ability to ping gateway and dns server, dns lookup, and ability to ping
-  internet address.
+  See README for more information or email info@inditech.org
   
-  This was designed on a Arduino Uno Ethernet board but should work on a regular
-  Uno + Ethernet Shield.
-  
-  The button circuit was modeled after tutorials from Adafruit:
-  http://www.ladyada.net/learn/arduino/lesson5.html
-  
-  The current design uses a 16x2 LCD panel hooked to a I2C backpack. More info
-  here: http://www.ladyada.net/products/i2cspilcdbackpack/
-  
-  info@inditech.org
+  Version 3.2.1.6
+    Lots of code optimizations
+      26110 Bytes Compiled
+      Arduino IDE 1.0.1
   
   Version 3.2.1.5
     Fixed IP display bug in host discovery
@@ -71,7 +63,7 @@
 // For reading/processing chip temperature
 #include <avr/io.h>
 
-#define PANT_VERSION "3.2.1.4"
+#define PANT_VERSION "3.2.1.5"
 #define AUTHOR "Mike Cherry"
 #define COAUTHOR "Eric Brundick"
 #define COAUTHOR2 "Blake Foster"
@@ -92,10 +84,17 @@
 #define BLANK "                "
 
 // which pins the buttons are on
-#define upBtn A3
-#define dnBtn A0
-#define selBtn A2
-#define bckBtn A1
+//#define upBtn A3
+//#define dnBtn A0
+//#define selBtn A2
+//#define bckBtn A1
+
+#define buttonUp 0
+#define buttonDown 1
+#define buttonSelect 2
+#define buttonBack 3
+
+boolean buttons[4];
 
 // Ethernet mac address
 byte mac[6] = { 0x90, 0xA2, 0xDA, 0x0D, 0x61, 0x42 };
@@ -105,7 +104,8 @@ byte internetIp[4] = { 4, 2, 2, 2 };
 char internetServer[11] = "google.com";
 
 // global array to hold current button state (HIGH == pressed)
-int buttonState[4];
+//int buttonState[4];
+//boolean buttonState[4];
 
 int ethernetActive = 0;
 int ethernetFailed = 0;
@@ -185,8 +185,10 @@ int pingHost(IPAddress ip, char label[], int pings = 10)
     {
       ICMPPing ping(pingSocket);
      
-      readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
-      if (buttonState[3] == HIGH)
+      //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+      readButtons();
+      //if (buttonState[3] == HIGH)
+      if (buttons[buttonBack] == HIGH)
       {
         lcdPrint(0, 1, CANCEL);
        
@@ -540,19 +542,20 @@ void diagMenu()
   
   while (1)
   {
-    readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+    //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+    readButtons();
      
     // back button
-    if (buttonState[3] == HIGH) return;
+    if (buttons[buttonBack] == HIGH) return;
      
     // up button  
-    if (buttonState[0] == HIGH) CursorPrevious(DiagMenu, 5);
+    if (buttons[buttonUp] == HIGH) CursorPrevious(DiagMenu, 5);
     
     // down button
-    if (buttonState[1] == HIGH) CursorNext(DiagMenu, 5);
+    if (buttons[buttonDown] == HIGH) CursorNext(DiagMenu, 5);
      
     // select button
-    if (buttonState[2] == HIGH)
+    if (buttons[buttonSelect] == HIGH)
     {
       int gwPingLoss, dnsPingLoss, err, extPingLoss;
       switch (CurrentMenuItem)
@@ -644,10 +647,11 @@ void infoMenu()
     while (buttonClick == 0)
     {
       // as long as no button has been pressed, read the state of all buttons
-      readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+      //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+      readButtons();
       
       // down button
-      if (buttonState[1] == HIGH)
+      if (buttons[buttonDown] == HIGH)
       {
         if (menuPosition < (menuItems - 1))
         {
@@ -658,7 +662,7 @@ void infoMenu()
       }
       
       // up button
-      if (buttonState[0] == HIGH)
+      if (buttons[buttonUp] == HIGH)
       {
         if (menuPosition > 0)
         {
@@ -669,7 +673,7 @@ void infoMenu()
       }
       
       // back button
-      if (buttonState[3] == HIGH) return;
+      if (buttons[buttonBack] == HIGH) return;
     }
   }
 }
@@ -688,7 +692,7 @@ void aboutMenu()
     switch (menuPosition)
     {
       case 0:
-        //sprintf(line0, "PANT Version");
+        sprintf(line0, "PANT Version");
         sprintf(line1, "%s", PANT_VERSION);
         break;
       
@@ -730,10 +734,11 @@ void aboutMenu()
     
     while (buttonClick == 0)
     {
-      readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+      //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+      readButtons();
       
       // down button
-      if (buttonState[1] == HIGH)
+      if (buttons[buttonDown] == HIGH)
       {
         if (menuPosition < (menuItems - 1))
         {
@@ -743,7 +748,7 @@ void aboutMenu()
       }
       
       // up button
-      if (buttonState[0] == HIGH)
+      if (buttons[buttonUp] == HIGH)
       {
         if (menuPosition > 0)
         {
@@ -753,7 +758,7 @@ void aboutMenu()
       }
       
       // back button
-      if (buttonState[3] == HIGH) return;
+      if (buttons[buttonBack] == HIGH) return;
     }
   }
 }
@@ -764,7 +769,7 @@ void aboutMenu()
 void iplist_define(byte ipaddr[], byte subnetmask[])
 {
   int i;
-  char buffer[17];
+  //char buffer[17];
   
   for (i=31; i>=0; i--)
   {
@@ -774,10 +779,12 @@ void iplist_define(byte ipaddr[], byte subnetmask[])
      
       netsize = ((unsigned long)1) << (31-i);
      
-      subnet[0] = ipaddr[0] & subnetmask[0];
-      subnet[1] = ipaddr[1] & subnetmask[1];
-      subnet[2] = ipaddr[2] & subnetmask[2];
-      subnet[3] = ipaddr[3] & subnetmask[3];
+      //subnet[0] = ipaddr[0] & subnetmask[0];
+      //subnet[1] = ipaddr[1] & subnetmask[1];
+      //subnet[2] = ipaddr[2] & subnetmask[2];
+      //subnet[3] = ipaddr[3] & subnetmask[3];
+      
+      for (int a = 0; a <= 3; a++) subnet[a] = ipaddr[a] & subnetmask[a];
       
       return;
     }
@@ -790,10 +797,12 @@ void iplist_define(byte ipaddr[], byte subnetmask[])
 boolean iplist_next(byte nextip[])
 {
   if (current < netsize) {
-    nextip[0] = subnet[0];
-    nextip[1] = subnet[1];
-    nextip[2] = subnet[2];
-    nextip[3] = subnet[3];
+    //nextip[0] = subnet[0];
+    //nextip[1] = subnet[1];
+    //nextip[2] = subnet[2];
+    //nextip[3] = subnet[3];
+    //int a;
+    for (int a = 0; a <= 3; a++) nextip[a] = subnet[a];
  
     if (current & 0x000000FF)
     {
@@ -831,7 +840,7 @@ boolean iplist_next(byte nextip[])
 // based on netmask and ip address
 void hostDiscovery()
 {
-  int cursorpos = 0;
+  //int cursorpos = 0;
   
   boolean iptest, hostcheck;
   
@@ -852,12 +861,15 @@ void hostDiscovery()
   lcdPrint(0, 0, "Found", true);
   
   // try to get the first ip in the range
-  iptest = iplist_next(validIp);
-  while (iptest == true)
+  //iptest = iplist_next(validIp);
+  //while (iptest == true)
+  while (iplist_next(validIp) == true)
   {
     // process back button to cancel search
-    readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
-    if (buttonState[3] == HIGH)
+    //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+    readButtons();
+    
+    if (buttons[buttonBack] == HIGH)
     {
       lcdPrint(0, 1, CANCEL);
        
@@ -894,9 +906,9 @@ void hostDiscovery()
     //}
     
     // get next ip in the range
-    iptest = iplist_next(validIp);
+    //iptest = iplist_next(validIp);
     
-    cursorpos++;
+    //cursorpos++;
   }
   
   // show total number of found hosts
@@ -909,9 +921,10 @@ void hostDiscovery()
   // wait for user to press back button  
   while (1)
   {
-    readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+    //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+    readButtons();
     
-    if (buttonState[3] == HIGH) return;
+    if (buttons[buttonBack] == HIGH) return;
   }
 }
 
@@ -924,16 +937,17 @@ void mainMenu()
   
   while (1)
   {
-    readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+    //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+    readButtons();
      
     // up button
-    if (buttonState[0] == HIGH) CursorPrevious(MainMenu, 5);
+    if (buttons[buttonUp] == HIGH) CursorPrevious(MainMenu, 5);
     
     // down button
-    if (buttonState[1] == HIGH) CursorNext(MainMenu, 5);
+    if (buttons[buttonDown] == HIGH) CursorNext(MainMenu, 5);
     
     // select button
-    if (buttonState[2] == HIGH)
+    if (buttons[buttonSelect] == HIGH)
     {
       switch (CurrentMenuItem)
       {
@@ -972,16 +986,17 @@ void superSecretMenu()
   
   while (1)
   {
-    readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+    //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+    readButtons();
      
     // up button
-    if (buttonState[0] == HIGH) CursorPrevious(SuperSecretMenu, 2);
+    if (buttons[buttonUp] == HIGH) CursorPrevious(SuperSecretMenu, 2);
     
     // down button
-    if (buttonState[1] == HIGH) CursorNext(SuperSecretMenu, 2);
+    if (buttons[buttonDown] == HIGH) CursorNext(SuperSecretMenu, 2);
     
     // select button
-    if (buttonState[2] == HIGH)
+    if (buttons[buttonSelect] == HIGH)
     {
       switch (CurrentMenuItem)
       {
@@ -1008,10 +1023,11 @@ void drainBattery()
   
   while (1)
   {
-    readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+    //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+    readButtons();
      
     // back
-    if (buttonState[3] == HIGH) return;
+    if (buttons[buttonBack] == HIGH) return;
     
     b[0] = random(32, 255);
     lcdPrint(random(0, 16), a, b);
@@ -1058,21 +1074,23 @@ int chipTempF()
 }
 
 // read the state of the buttons, HIGH == pressed
-void readButtons(int *buttonState, int button1, int button2, int button3, int button4)
+//void readButtons(int *buttonState, int button1, int button2, int button3, int button4)
+//void readButtons(boolean *buttonState, int button1, int button2, int button3, int button4)
+void readButtons()
 {
-  buttonState[0] = digitalRead(button1);
-  buttonState[1] = digitalRead(button2);
-  buttonState[2] = digitalRead(button3);
-  buttonState[3] = digitalRead(button4);
+  buttons[buttonUp] = digitalRead(A3);
+  buttons[buttonDown] = digitalRead(A0);
+  buttons[buttonSelect] = digitalRead(A2);
+  buttons[buttonBack] = digitalRead(A1);
 }
 
 void setup()
 {
   // set the button pins to input
-  pinMode(upBtn, INPUT);
-  pinMode(dnBtn, INPUT);
-  pinMode(bckBtn, INPUT);
-  pinMode(selBtn, INPUT);
+  pinMode(buttonUp, INPUT);
+  pinMode(buttonDown, INPUT);
+  pinMode(buttonSelect, INPUT);
+  pinMode(buttonBack, INPUT);
 
   //delay(250);  
   
@@ -1082,8 +1100,9 @@ void setup()
   //Serial.begin(9600);
   
   // detect ultra super secret button combo
-  readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
-  if ((buttonState[0] != HIGH) && (buttonState[1] == HIGH) && (buttonState[2] != HIGH) && (buttonState[3] == HIGH))
+  //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+  readButtons();
+  if ((buttons[buttonUp] == LOW) && (buttons[buttonDown] == HIGH) && (buttons[buttonSelect] == LOW) && (buttons[buttonBack] == HIGH))
   {
     int a;
     
@@ -1097,8 +1116,9 @@ void setup()
       delay(75);
     }
     
-    readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
-    if ((buttonState[0] != HIGH) && (buttonState[1] != HIGH) && (buttonState[2] != HIGH) && (buttonState[3] == HIGH))
+    //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+    readButtons();
+    if ((buttons[buttonUp] == LOW) && (buttons[buttonDown] == LOW) && (buttons[buttonSelect] == LOW) && (buttons[buttonBack] == HIGH))
     {
       superSecretMenu();
     }
