@@ -11,15 +11,19 @@
 #include <Dns.h>
 #include <utility/w5100.h>
 
+// https://github.com/mcherry/I2Ceeprom
+#include <I2Ceeprom.h>
+
 // sourced from http://www.arduino.cc/cgi-bin/yabb2/YaBB.pl?num=1285859555
 // written by Blake Foster - http://www.blake-foster.com/contact.php
-// modified by Mike Cherr <mcherry@inditech.org> to reduce the amount of bytes return on success/fail
+// modified by Mike Cherry <mcherry@inditech.org> to reduce the amount of bytes return on success/fail
+// modified version: https://github.com/mcherry/ICMPPing
 #include <ICMPPing.h>
 
 // For reading/processing chip temperature
-#include <avr/io.h>
+// #include <avr/io.h>
 
-#define PANT_VERSION "3.2.1.5"
+#define PANT_VERSION "3.3.1.7"
 #define AUTHOR "Mike Cherry"
 #define COAUTHOR "Eric Brundick"
 #define COAUTHOR2 "Blake Foster"
@@ -31,19 +35,16 @@
 #define COEMAIL4 "@vassar.edu"
 
 #define LONG_DELAY 1750
+#define MEDIUM_DELAY 500
 #define SHORT_DELAY 250
+#define MICRO_DELAY 150
+
 #define PROMPT ">"
 #define CANCEL "Canceled        "
 #define STATUS_OK "."
 #define STATUS_GO "o"
 #define STATUS_FAIL "x"
 #define BLANK "                "
-
-// which pins the buttons are on
-//#define upBtn A3
-//#define dnBtn A0
-//#define selBtn A2
-//#define bckBtn A1
 
 #define buttonUp 0
 #define buttonDown 1
@@ -58,10 +59,6 @@ byte mac[6] = { 0x90, 0xA2, 0xDA, 0x0D, 0x61, 0x42 };
 // internet server to ping and another to perform dns lookup
 byte internetIp[4] = { 4, 2, 2, 2 };
 char internetServer[11] = "google.com";
-
-// global array to hold current button state (HIGH == pressed)
-//int buttonState[4];
-//boolean buttonState[4];
 
 int ethernetActive = 0;
 int ethernetFailed = 0;
@@ -94,6 +91,9 @@ SOCKET pingSocket = 3;
 // initialize lcd & ethernet
 LiquidCrystal lcd(0);
 EthernetClient client;
+
+// initialize 1024Mbit EEPROM chip at address 0x50 using 128 byte pages
+I2Ceeprom eeprom(0x50, 1024000, 128);
 
 // print a message to a given column and row, optionally clearing the screen
 void lcdPrint(int column, int row, char message[], boolean clrscreen = false)
@@ -134,122 +134,66 @@ int pingHost(IPAddress ip, char label[], int pings = 10)
     pingloop = 1;
   }
   
-  //if (pings > 0)
-  //{
-    // sending a defined number of pings
-    for (pingNo = 0; pingNo < pings; pingNo++)
+  for (pingNo = 0; pingNo < pings; pingNo++)
+  {
+    ICMPPing ping(pingSocket);
+     
+    readButtons();
+      
+    if (buttons[buttonBack] == HIGH)
     {
-      ICMPPing ping(pingSocket);
-     
-      //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
-      readButtons();
-      //if (buttonState[3] == HIGH)
-      if (buttons[buttonBack] == HIGH)
-      {
-        lcdPrint(0, 1, CANCEL);
+      lcdPrint(0, 1, CANCEL);
        
-        delay(SHORT_DELAY*2);
+      delay(MEDIUM_DELAY);
         
-        if (pingloop == 1)
-        {
-          break;
-        }
-        
-        return packetLoss;
-      }
-     
-      // send a single ping with a 4 second timeout, returning the result in pingBuffer
-      ping(4, thisIp, pingBuffer);
-      
-      if (strncmp(pingBuffer, "T", 1) == 0)
-      {
-        // packet timeout results in printing a 'x' on-screen
-        lcdPrint(linePos, 1, STATUS_FAIL);
-        packetLoss++;
-        
-        hasHadPacketLoss = 1;
-      }
-      else
-      {
-        // successful packet results in printing a '.' on-screen
-        if (pingloop == 1)
-        {
-          lcdPrint(linePos, 1, STATUS_GO);
-          hasHadPacketLoss = 0;
-        }
-        else
-        {
-          lcdPrint(linePos, 1, STATUS_OK);
-        }
-      }
-     
-      // wait minimum between pings
-      delay(SHORT_DELAY+150);
-      
       if (pingloop == 1)
       {
-        if (hasHadPacketLoss == 0) lcdPrint(linePos, 1, STATUS_OK);
-        
-        pingNo = 0;
-      }
-      
-      sentPackets++;
-      linePos++;
-      
-      if (linePos == 16) linePos = 0;
-    }
-  //}
-  /*
-  else
-  {
-    int pingNo = 0;
-    int hasHadPacketLoss = 0;
-    
-    // pinging until canceled
-    while (1)
-    {
-      ICMPPing ping(pingSocket);
-     
-      readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
-      if (buttonState[3] == HIGH)
-      {
-        // user pressed cancel button
-        lcdPrint(0, 1, CANCEL);
-       
-        delay(SHORT_DELAY+250);
-       
         break;
       }
-      
-      ping(4, thisIp, pingBuffer);
-      
-      if (strncmp(pingBuffer, "T", 1) == 0)
-      {
-        // packet timeout results in printing a 'x' on-screen
-        lcdPrint(pingNo, 1, STATUS_FAIL);
-        packetLoss++;
         
-        hasHadPacketLoss = 1;
+      return packetLoss;
+    }
+     
+    // send a single ping with a 4 second timeout, returning the result in pingBuffer
+    ping(4, thisIp, pingBuffer);
+      
+    if (strncmp(pingBuffer, "T", 1) == 0)
+    {
+      // packet timeout results in printing a 'x' on-screen
+      lcdPrint(linePos, 1, STATUS_FAIL);
+      packetLoss++;
+        
+      hasHadPacketLoss = 1;
+    }
+    else
+    {
+      // successful packet results in printing a '.' on-screen
+      if (pingloop == 1)
+      {
+        lcdPrint(linePos, 1, STATUS_GO);
+        hasHadPacketLoss = 0;
       }
       else
       {
-        // successful packet results in printing a '.' on-screen
-        lcdPrint(pingNo, 1, STATUS_GO);
-        
-        hasHadPacketLoss = 0;
+        lcdPrint(linePos, 1, STATUS_OK);
       }
-       
-      sentPackets++;
-      
-      delay(SHORT_DELAY+150);
-       
-      if (hasHadPacketLoss == 0) lcdPrint(pingNo, 1, STATUS_OK);
-              
-      pingNo++;
-      if (pingNo == 16) pingNo = 0;
     }
+     
+    // wait minimum between pings
+    delay(MEDIUM_DELAY);
+      
+    if (pingloop == 1)
+    {
+      if (hasHadPacketLoss == 0) lcdPrint(linePos, 1, STATUS_OK);
+        
+      pingNo = 0;
+    }
+      
+    sentPackets++;
+    linePos++;
+      
+    if (linePos == 16) linePos = 0;
   }
-  */
   
   // successful number of packets received
   packets = (sentPackets - packetLoss);
@@ -261,28 +205,6 @@ int pingHost(IPAddress ip, char label[], int pings = 10)
 
   return packetLoss;
 }
-
-// ping a host to determine if its alive (responding to ping)
-/*
-boolean checkHostUp(byte ip[])
-{
-  ICMPPing ping(pingSocket);
-  
-  // ping a host with a 2 second timeout
-  ping(1, ip, pingBuffer);
-  
-  if (strncmp(pingBuffer, "T", 1) == 0)
-  {
-    // timeout
-    return false;
-  }
-  else
-  {
-    // successful
-    return true;
-  }
-}
-*/
 
 // test if name resolution works using dns server obtained via dhcp
 int dnsTest()
@@ -303,7 +225,6 @@ int dnsTest()
   else
   {
     lcdPrint(0, 0, "DNS failed", true);
-    //lcdPrint(0, 1, "resolve");
   }
   
   delay(LONG_DELAY);
@@ -316,15 +237,11 @@ void testNetwork()
 {
   int gwPingLoss, dnsPingLoss, extPingLoss, err;
   int dnsFailed, gwFailed, extFailed;
-  //int dnsNameFailed;
   
-  gwPingLoss = pingHost(Ethernet.gatewayIP(), "Ping gateway");
-     
+  gwPingLoss = pingHost(Ethernet.gatewayIP(), "Ping gateway");   
   dnsPingLoss = pingHost(Ethernet.dnsServerIP(), "Ping DNS");
 
   err = dnsTest();
-     
-  //if (err != 1) dnsNameFailed = 1;
      
   extPingLoss = pingHost(internetIp, "Ping ext host");
   
@@ -414,7 +331,6 @@ void CursorNext(char *Menu[], int MenuItems)
   if ((CursorPosition == 0))
   {
     // we are at the begining of a menu
-    //if ((CurrentMenuItem + 1) < (MenuItems - 1))
     if ((CurrentMenuItem + 1) < (MenuItems))
     {
       lcdPrint(0, 0, " ");
@@ -430,7 +346,6 @@ void CursorNext(char *Menu[], int MenuItems)
     // we are displaying pages if info
     // so we need to advance to the next page
     if (CurrentPage < (PageCount(MenuItems) - 1))
-    //if (CurrentPage < PageCount(MenuItems))
     {
       lcd.clear();
       
@@ -443,7 +358,6 @@ void CursorNext(char *Menu[], int MenuItems)
       lcdPrint(2, 0, Menu[CurrentMenuItem]);
       
       // more than 1 item to display on this page
-      //if ((CurrentMenuItem + 1) < (MenuItems - 1)) lcdPrint(2, 1, Menu[CurrentMenuItem + 1]);
       if ((CurrentMenuItem + 1) < (MenuItems)) lcdPrint(2, 1, Menu[CurrentMenuItem + 1]);
     }
   }
@@ -498,7 +412,6 @@ void diagMenu()
   
   while (1)
   {
-    //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
     readButtons();
      
     // back button
@@ -553,7 +466,7 @@ void infoMenu()
   // starting out at the begining of the display
   int menuPosition = 0;
   int buttonClick = 0;
-  int menuItems = 6;
+  int menuItems = 4;
   
   while (1)
   {
@@ -582,6 +495,7 @@ void infoMenu()
         sprintf(line1, "%d.%d.%d.%d", mySubnetMask[0], mySubnetMask[1], mySubnetMask[2], mySubnetMask[3]);
         break;
       
+      /*
       case 4:
         sprintf(line0, "MAC Addr");
         sprintf(line1, "%02x%02x.%02x%02x.%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -591,6 +505,7 @@ void infoMenu()
         sprintf(line0, "Processor Temp");
         sprintf(line1, "%i F", chipTempF());
         break;
+      */
     }
     
     // display output compiled above
@@ -603,7 +518,6 @@ void infoMenu()
     while (buttonClick == 0)
     {
       // as long as no button has been pressed, read the state of all buttons
-      //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
       readButtons();
       
       // down button
@@ -623,6 +537,89 @@ void infoMenu()
         if (menuPosition > 0)
         {
           // decrease which page we are on if we arent on the first page
+          menuPosition--;
+          buttonClick = 1;
+        }
+      }
+      
+      // back button
+      if (buttons[buttonBack] == HIGH) return;
+    }
+  }
+}
+
+char *eepromGetLine(int line)
+{
+  int addr = 0;
+  char newbuffer[17];
+  byte c;
+  
+  if (line > 0)
+  {
+    addr = (line * 16) + line;
+  }
+  
+  for (int a = 0; a <= 16; a++)
+  {
+    c = eeprom.ReadByte(addr);
+    newbuffer[a] = (char)c;
+    
+    addr++;
+  }
+  
+  /*
+  Serial.print("line = ");
+  Serial.println(line);
+  
+  Serial.print("addr = ");
+  Serial.println(addr);
+  
+  Serial.print("'");
+  Serial.print(newbuffer);
+  Serial.println("'");
+  */
+  return newbuffer;
+}
+
+void showEeprom(int menuItems)
+{
+  int menuPosition = 0;
+  int buttonClick = 0;
+  
+  while (1)
+  {
+    if (buttonClick == 1) buttonClick = 0;
+    
+    strcpy(line0, eepromGetLine(menuPosition));
+    lcdPrint(0, 0, line0, true);
+    
+    if ((menuPosition+1) < menuItems)
+    {
+      strcpy(line1, eepromGetLine(menuPosition+1));
+      lcdPrint(0, 1, line1);
+    }
+    
+    delay(SHORT_DELAY);
+    
+    while (buttonClick == 0)
+    {
+      readButtons();
+      
+      // down button
+      if (buttons[buttonDown] == HIGH)
+      {
+        if (menuPosition < (menuItems - 1))
+        {
+          menuPosition++;
+          buttonClick = 1;
+        }
+      }
+      
+      // up button
+      if (buttons[buttonUp] == HIGH)
+      {
+        if (menuPosition > 0)
+        {
           menuPosition--;
           buttonClick = 1;
         }
@@ -690,7 +687,6 @@ void aboutMenu()
     
     while (buttonClick == 0)
     {
-      //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
       readButtons();
       
       // down button
@@ -725,7 +721,6 @@ void aboutMenu()
 void iplist_define(byte ipaddr[], byte subnetmask[])
 {
   int i;
-  //char buffer[17];
   
   for (i=31; i>=0; i--)
   {
@@ -735,11 +730,6 @@ void iplist_define(byte ipaddr[], byte subnetmask[])
      
       netsize = ((unsigned long)1) << (31-i);
      
-      //subnet[0] = ipaddr[0] & subnetmask[0];
-      //subnet[1] = ipaddr[1] & subnetmask[1];
-      //subnet[2] = ipaddr[2] & subnetmask[2];
-      //subnet[3] = ipaddr[3] & subnetmask[3];
-      
       for (int a = 0; a <= 3; a++) subnet[a] = ipaddr[a] & subnetmask[a];
       
       return;
@@ -753,11 +743,6 @@ void iplist_define(byte ipaddr[], byte subnetmask[])
 boolean iplist_next(byte nextip[])
 {
   if (current < netsize) {
-    //nextip[0] = subnet[0];
-    //nextip[1] = subnet[1];
-    //nextip[2] = subnet[2];
-    //nextip[3] = subnet[3];
-    //int a;
     for (int a = 0; a <= 3; a++) nextip[a] = subnet[a];
  
     if (current & 0x000000FF)
@@ -796,14 +781,10 @@ boolean iplist_next(byte nextip[])
 // based on netmask and ip address
 void hostDiscovery()
 {
-  //int cursorpos = 0;
-  
   boolean iptest, hostcheck;
   
   unsigned long hostcount = 0;
   unsigned long pingedhosts = 0;
-  
-  //char buffer[17];
   
   byte validIp[4];
   
@@ -817,19 +798,16 @@ void hostDiscovery()
   lcdPrint(0, 0, "Found", true);
   
   // try to get the first ip in the range
-  //iptest = iplist_next(validIp);
-  //while (iptest == true)
   while (iplist_next(validIp) == true)
   {
     // process back button to cancel search
-    //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
     readButtons();
     
     if (buttons[buttonBack] == HIGH)
     {
       lcdPrint(0, 1, CANCEL);
        
-      delay(SHORT_DELAY+250);
+      delay(MEDIUM_DELAY);
      
       break;
     }
@@ -849,22 +827,7 @@ void hostDiscovery()
       lcdPrint(6, 0, line0);
     }
     
-    pingedhosts++;
-      
-    //hostcheck = checkHostUp(validIp);
-    //if (hostcheck == true)
-    //{
-      // host is up and responding to ping
-      //hostcount++;
-      
-      //sprintf(line0, "%d", hostcount);
-      //lcdPrint(6, 0, line0);
-    //}
-    
-    // get next ip in the range
-    //iptest = iplist_next(validIp);
-    
-    //cursorpos++;
+    pingedhosts++;      
   }
   
   // show total number of found hosts
@@ -877,7 +840,158 @@ void hostDiscovery()
   // wait for user to press back button  
   while (1)
   {
-    //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+    readButtons();
+    
+    if (buttons[buttonBack] == HIGH) return;
+  }
+}
+
+// enable user to enter an IP address
+// pressing back with cursor under first octet returns an ip with 0 for the first octet (canceled)
+// pressing select with cursor under last octet returns the ip that was input (selected ip)
+IPAddress ipInput(IPAddress ip)
+{
+  int octetPos = 0;
+  
+  //byte ip[] = { startip[0], startip[1], startip[2], startip[3] };
+  
+  sprintf(line0, "%03d.%03d.%03d.%03d", ip[0], ip[1], ip[2], ip[3]);
+  lcdPrint(0, 0, line0, true);
+  lcdPrint(2, 1, "^");
+  
+  delay(SHORT_DELAY);
+  
+  while (1)
+  {
+    readButtons();
+    
+    if (buttons[buttonUp] == HIGH)
+    {
+      if (ip[octetPos] < 254)
+      {
+        ip[octetPos]++;
+        
+        sprintf(line0, "%03d", ip[octetPos]);
+        lcdPrint((octetPos+2*(octetPos+1)+octetPos)-2, 0, line0);
+        
+        delay(MICRO_DELAY);
+      }
+    }
+    
+    if (buttons[buttonDown] == HIGH)
+    {
+      if (ip[octetPos] > 0)
+      {
+        ip[octetPos]--;
+        
+        sprintf(line0, "%03d", ip[octetPos]);
+        lcdPrint((octetPos+2*(octetPos+1)+octetPos)-2, 0, line0);
+        
+        delay(MICRO_DELAY);
+      }
+    }
+    
+    if (buttons[buttonSelect] == HIGH)
+    {
+      if (octetPos == 3) return ip;
+      
+      if (octetPos < 4)
+      {
+        if (octetPos != 3)
+        {
+          octetPos++;
+          lcdPrint(0, 1, BLANK);  
+        }
+        
+        lcdPrint(octetPos+2*(octetPos+1)+octetPos, 1, "^");
+        
+        delay(SHORT_DELAY);
+      }
+    }
+    
+    if (buttons[buttonBack] == HIGH)
+    {
+      if (octetPos == 0)
+      {
+        ip[0] = 0;
+        
+        return ip;
+      }
+      
+      octetPos--;
+      
+      lcdPrint(0, 1, BLANK);
+      lcdPrint(octetPos+2*(octetPos+1)+octetPos, 1, "^");
+      
+      delay(SHORT_DELAY);
+    }
+  }
+}
+
+void portScanner()
+{
+  IPAddress ip;
+  int addr = 0;
+  //char buffer[17];
+  
+  //byte portList[1024];
+  
+  int portCount = 0;
+  
+  ip = ipInput(myLocalIp);
+  if (ip[0] == 0) return;
+  
+  sprintf(line0, "%02d.%02d.%02d.%02d", ip[0], ip[1], ip[2], ip[3]);
+  lcdPrint(0, 0, line0, true);
+  
+  for (int a = 0; a <= 1023; a++)
+  {
+    readButtons();
+    
+    if (buttons[buttonBack] == HIGH)
+    {
+      lcdPrint(0, 1, CANCEL);
+       
+      delay(MEDIUM_DELAY);
+      
+      break;
+    }
+    
+    sprintf(line1, "Trying port %d", a+1);
+    lcdPrint(0, 1, line1);
+  
+    if (client.connect(ip, a+1))
+    {
+      client.stop();
+      
+      sprintf(line0, "Port %d", a+1);
+      sprintf(line1, "%-16s", line0);
+      
+      //Serial.print("'");
+      //Serial.print(line1);
+      //Serial.println("'");
+      //portList[a] = 1;
+      
+      eeprom.WritePage(addr, (byte *)line1, sizeof(line1));
+      addr += 17;
+      
+      portCount++;
+    }
+  }
+  
+  sprintf(line0, "Found %d", portCount, true);
+  lcdPrint(0, 0, line0, true);
+  lcdPrint(0, 1, "open ports");
+  
+  if (portCount > 0)
+  {
+    delay(LONG_DELAY);
+    
+    showEeprom(portCount);
+  }
+  
+  while (1)
+  {
     readButtons();
     
     if (buttons[buttonBack] == HIGH) return;
@@ -887,20 +1001,19 @@ void hostDiscovery()
 // display main menu
 void mainMenu()
 {
-  char *MainMenu[5] = { "Information", "Diagnostics", "Discovery", "Restart", "About" };
+  char *MainMenu[6] = { "Information", "Diagnostics", "Host Discovery", "Port Scanner", "Restart", "About" };
   
-  printMenu(MainMenu, 5);
+  printMenu(MainMenu, 6);
   
   while (1)
   {
-    //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
     readButtons();
      
     // up button
-    if (buttons[buttonUp] == HIGH) CursorPrevious(MainMenu, 5);
+    if (buttons[buttonUp] == HIGH) CursorPrevious(MainMenu, 6);
     
     // down button
-    if (buttons[buttonDown] == HIGH) CursorNext(MainMenu, 5);
+    if (buttons[buttonDown] == HIGH) CursorNext(MainMenu, 6);
     
     // select button
     if (buttons[buttonSelect] == HIGH)
@@ -920,20 +1033,25 @@ void mainMenu()
           break;
           
         case 3:
-          softReset();
+          portScanner();
           break;
           
         case 4:
+          softReset();
+          break;
+          
+        case 5:
           aboutMenu();
           break;
       }
          
-      printMenu(MainMenu, 5);
+      printMenu(MainMenu, 6);
     }
   }
 }
 
 // display main menu
+/*
 void superSecretMenu()
 {
   char *SuperSecretMenu[2] = { "Drain Battery", "Restart" };
@@ -942,7 +1060,6 @@ void superSecretMenu()
   
   while (1)
   {
-    //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
     readButtons();
      
     // up button
@@ -979,7 +1096,6 @@ void drainBattery()
   
   while (1)
   {
-    //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
     readButtons();
      
     // back
@@ -990,10 +1106,12 @@ void drainBattery()
     
     a = 1 - a;
     
-    delay(SHORT_DELAY);
+    delay(MICRO_DELAY);
   }
 }
+*/
 
+/*
 // this is some reworked code originally sourced from
 // http://www.avdweb.nl/arduino/hardware-interfacing/temperature-measurement.html
 int readAdc()
@@ -1028,10 +1146,9 @@ int chipTempF()
   
   return ((9 * (averageTemp / divideFactor) + 1600) / 5) / 10;
 }
+*/
 
 // read the state of the buttons, HIGH == pressed
-//void readButtons(int *buttonState, int button1, int button2, int button3, int button4)
-//void readButtons(boolean *buttonState, int button1, int button2, int button3, int button4)
 void readButtons()
 {
   buttons[buttonUp] = digitalRead(A3);
@@ -1042,21 +1159,87 @@ void readButtons()
 
 void setup()
 {
+  delay(LONG_DELAY*2);
+  
   // set the button pins to input
   pinMode(buttonUp, INPUT);
   pinMode(buttonDown, INPUT);
   pinMode(buttonSelect, INPUT);
   pinMode(buttonBack, INPUT);
 
-  //delay(250);  
+  //char data[] = "Port 666";
+  //char somedata1[17];
+  
+  //sprintf(somedata1, "%-16s", data);
   
   // initialize 16x2 lcd
   lcd.begin(16, 2);
   
   //Serial.begin(9600);
   
+  /*
+  int records = 4;
+  int addr = 0;
+  byte c;
+  char newbuffer[17];
+  
+  for (int a = 0; a <= (records-1); a++)
+  {
+    for (int b = 0; b <= 16; b++)
+    {
+      c = eeprom.ReadByte(addr);
+      newbuffer[b] = (char)c;
+      
+      addr++;
+    }
+    
+    Serial.println(newbuffer);
+    
+    Serial.print("* addr = ");
+    Serial.println(addr);
+  }
+  */
+  
+  //for (int a = 0; a <= 5; a++)
+  //{
+  //  strcpy(line0, eepromGetLine(a));
+  //  Serial.println(line0);
+  //}
+  
+  //eeprom.WritePage(0, (byte *)somedata1, sizeof(somedata1));
+  /*
+  int addr = 0;
+  //byte b = eeprom.ReadByte(0);
+  byte b;
+  
+  Serial.print("'");
+  
+  for (int a = 0; a <= 16; a++)
+  {
+    b = eeprom.ReadByte(a);
+    
+    newbuffer[a] = (char)b;
+  }
+  
+  Serial.print(newbuffer);
+  */
+  
+  /*
+  while (b != 0)
+  {
+    //strcat(buffer3, (char *)b);
+    Serial.print((char)b);
+    
+    addr++;
+    
+    b = eeprom.ReadByte(addr);
+  }
+  */
+  
+  //Serial.println("'");
+  
   // detect ultra super secret button combo
-  //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
+  /*
   readButtons();
   if ((buttons[buttonUp] == LOW) && (buttons[buttonDown] == HIGH) && (buttons[buttonSelect] == LOW) && (buttons[buttonBack] == HIGH))
   {
@@ -1072,13 +1255,13 @@ void setup()
       delay(75);
     }
     
-    //readButtons(buttonState, upBtn, dnBtn, selBtn, bckBtn);
     readButtons();
     if ((buttons[buttonUp] == LOW) && (buttons[buttonDown] == LOW) && (buttons[buttonSelect] == LOW) && (buttons[buttonBack] == HIGH))
     {
       superSecretMenu();
     }
   }
+  */
 }
 
 void loop()

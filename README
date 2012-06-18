@@ -33,9 +33,15 @@ Features:
   Host Discovery
     Calculate how many IP addresses it should be able to see and ping them all
     800ms timeout between pings and the ability to cancel the scan
-
+    
+  Port Scanner
+    Allows you to enter an IP address to scan
+    Scans ports 1 - 1024 (for now) and displays report
     
 Components:
+
+24FC1026-I/P I2C EEPROM
+Microchip Technology - http://www.mouser.com/Search/ProductDetail.aspx?R=24FC1026-I/Pvirtualkey57940000virtualkey579-24FC1026-I/P
 
 5V Boost Regulator
 Pololu - http://www.pololu.com/catalog/product/798

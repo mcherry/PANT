@@ -1,3 +1,12 @@
+  Version 3.3.1.7
+    Hardware: Added 1024Mbit eeprom for temporary storage
+    Added port scanner
+    Added IP input screen
+    Misc code optimizations
+    Cleaned out old code
+      27396 Bytes Compiled
+      Arduino IDE 1.0.1
+
   Version 3.2.1.6
     Added CHANGELOG
     Updated README
