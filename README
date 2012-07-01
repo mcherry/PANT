@@ -31,7 +31,7 @@ Features:
     If running an individual test, it will loop until canceled using the Back button
     
   Host Discovery
-    Calculate how many IP addresses it should be able to see and ping them all
+    Calculate how many IP addresses it should be able to see, ping them, and displays report
     800ms timeout between pings and the ability to cancel the scan
     
   Port Scanner

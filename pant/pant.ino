@@ -4,8 +4,8 @@
   See README for more information or email info@inditech.org
 */
 
-#include <LiquidCrystal.h>    // Adafruit modified LiquidCrystal library for i2c backpack
-#include <Wire.h>
+//#include <LiquidCrystal.h>    // Adafruit modified LiquidCrystal library for i2c backpack
+#include <LiquidTWI.h>
 #include <SPI.h>
 #include <Ethernet.h>
 #include <Dns.h>
@@ -13,6 +13,7 @@
 
 // https://github.com/mcherry/I2Ceeprom
 #include <I2Ceeprom.h>
+#include <Wire.h>
 
 // sourced from http://www.arduino.cc/cgi-bin/yabb2/YaBB.pl?num=1285859555
 // written by Blake Foster - http://www.blake-foster.com/contact.php
@@ -23,7 +24,7 @@
 // For reading/processing chip temperature
 // #include <avr/io.h>
 
-#define PANT_VERSION "3.3.1.7"
+#define PANT_VERSION "3.3.1.9"
 #define AUTHOR "Mike Cherry"
 #define COAUTHOR "Eric Brundick"
 #define COAUTHOR2 "Blake Foster"
@@ -50,6 +51,8 @@
 #define buttonDown 1
 #define buttonSelect 2
 #define buttonBack 3
+
+#define EEPROM_PAGESIZE 16
 
 boolean buttons[4];
 
@@ -89,7 +92,8 @@ IPAddress mySubnetMask;
 SOCKET pingSocket = 3;
 
 // initialize lcd & ethernet
-LiquidCrystal lcd(0);
+//LiquidCrystal lcd(0);
+LiquidTWI lcd(0);
 EthernetClient client;
 
 // initialize 1024Mbit EEPROM chip at address 0x50 using 128 byte pages
@@ -548,23 +552,24 @@ void infoMenu()
   }
 }
 
-char *eepromGetLine(int line)
+char *eepromGetLine(int line, byte page_size = EEPROM_PAGESIZE)
 {
-  int addr = 0;
-  char newbuffer[17];
-  byte c;
+  unsigned long lineaddr = 0;
+  char newbuffer[page_size+1];
+  byte a;
   
   if (line > 0)
   {
-    addr = (line * 16) + line;
+    //lineaddr = (line * page_size) + line;
+    lineaddr = (line * page_size);
   }
   
-  for (int a = 0; a <= 16; a++)
+  for (int b = 0; b <= page_size; b++)
   {
-    c = eeprom.ReadByte(addr);
-    newbuffer[a] = (char)c;
+    a = eeprom.ReadByte(lineaddr);
+    newbuffer[b] = (char)a;
     
-    addr++;
+    lineaddr++;
   }
   
   /*
@@ -586,17 +591,20 @@ void showEeprom(int menuItems)
   int menuPosition = 0;
   int buttonClick = 0;
   
+  char buffer0[17];
+  char buffer1[17];
+  
   while (1)
   {
     if (buttonClick == 1) buttonClick = 0;
     
-    strcpy(line0, eepromGetLine(menuPosition));
-    lcdPrint(0, 0, line0, true);
+    strcpy(buffer0, eepromGetLine(menuPosition));
+    lcdPrint(0, 0, buffer0, true);
     
     if ((menuPosition+1) < menuItems)
     {
-      strcpy(line1, eepromGetLine(menuPosition+1));
-      lcdPrint(0, 1, line1);
+      strcpy(buffer1, eepromGetLine(menuPosition+1));
+      lcdPrint(0, 1, buffer1);
     }
     
     delay(SHORT_DELAY);
@@ -779,14 +787,18 @@ boolean iplist_next(byte nextip[])
 
 // discover hosts responding to ping on the network
 // based on netmask and ip address
-void hostDiscovery()
+int hostDiscovery()
 {
   boolean iptest, hostcheck;
   
   unsigned long hostcount = 0;
   unsigned long pingedhosts = 0;
+  unsigned long startaddr = 0;
   
   byte validIp[4];
+  
+  char buffer0[17];
+  //char buffer1[17];
   
   // convert IPAddress's into byte arrays
   byte IPAsByte[] = { myLocalIp[0], myLocalIp[1], myLocalIp[2], myLocalIp[3] };
@@ -812,8 +824,10 @@ void hostDiscovery()
       break;
     }
     
-    sprintf(line1, "%d.%d.%d.%d        ", validIp[0], validIp[1], validIp[2], validIp[3]);
-    lcdPrint(0, 1, line1);
+    sprintf(line1, "%d.%d.%d.%d", validIp[0], validIp[1], validIp[2], validIp[3]);
+    sprintf(buffer0, "%-16s", line1);
+    
+    lcdPrint(0, 1, buffer0);
   
     ICMPPing ping(pingSocket);
     // ping a host
@@ -825,6 +839,15 @@ void hostDiscovery()
       hostcount++;
       sprintf(line0, "%d", hostcount);
       lcdPrint(6, 0, line0);
+      
+      //sprintf(buffer0, "%d.%d.%d.%d", validIp[0], validIp[1], validIp[2], validIp[3]);
+      //sprintf(buffer1, "%-16s", buffer0);
+      
+      if (startaddr <= 8000)
+      {
+        eeprom.WritePage(startaddr, (byte *)buffer0, EEPROM_PAGESIZE);
+        startaddr += EEPROM_PAGESIZE;
+      }
     }
     
     pingedhosts++;      
@@ -837,13 +860,21 @@ void hostDiscovery()
   lcdPrint(0, 0, line0, true);
   lcdPrint(0, 1, line1);
 
+  delay(LONG_DELAY);
+  
+  //showEeprom(hostcount);
   // wait for user to press back button  
+  /*
   while (1)
   {
     readButtons();
     
     if (buttons[buttonBack] == HIGH) return;
   }
+  */
+  
+  //delay(MICRO_DELAY);
+  return hostcount;
 }
 
 // enable user to enter an IP address
@@ -857,7 +888,10 @@ IPAddress ipInput(IPAddress ip)
   
   sprintf(line0, "%03d.%03d.%03d.%03d", ip[0], ip[1], ip[2], ip[3]);
   lcdPrint(0, 0, line0, true);
-  lcdPrint(2, 1, "^");
+  //lcdPrint(2, 1, "^");
+  lcd.setCursor(2, 0);
+  lcd.cursor();
+  lcd.blink();
   
   delay(SHORT_DELAY);
   
@@ -893,7 +927,12 @@ IPAddress ipInput(IPAddress ip)
     
     if (buttons[buttonSelect] == HIGH)
     {
-      if (octetPos == 3) return ip;
+      if (octetPos == 3)
+      {
+        lcd.noBlink();
+        lcd.noCursor();
+        return ip;
+      }
       
       if (octetPos < 4)
       {
@@ -903,8 +942,8 @@ IPAddress ipInput(IPAddress ip)
           lcdPrint(0, 1, BLANK);  
         }
         
-        lcdPrint(octetPos+2*(octetPos+1)+octetPos, 1, "^");
-        
+        //lcdPrint(octetPos+2*(octetPos+1)+octetPos, 1, "^");
+        lcd.setCursor(octetPos+2*(octetPos+1)+octetPos, 0);
         delay(SHORT_DELAY);
       }
     }
@@ -915,20 +954,25 @@ IPAddress ipInput(IPAddress ip)
       {
         ip[0] = 0;
         
+        lcd.noBlink();
+        lcd.noCursor();
+        
         return ip;
       }
       
       octetPos--;
       
-      lcdPrint(0, 1, BLANK);
-      lcdPrint(octetPos+2*(octetPos+1)+octetPos, 1, "^");
+      //lcdPrint(0, 1, BLANK);
+      //lcdPrint(octetPos+2*(octetPos+1)+octetPos, 1, "^");
+      lcd.setCursor(octetPos+2*(octetPos+1)+octetPos, 0);
+      //lcd.cursor();
       
       delay(SHORT_DELAY);
     }
   }
 }
 
-void portScanner()
+int portScanner()
 {
   IPAddress ip;
   int addr = 0;
@@ -939,7 +983,7 @@ void portScanner()
   int portCount = 0;
   
   ip = ipInput(myLocalIp);
-  if (ip[0] == 0) return;
+  if (ip[0] == 0) return 0;
   
   sprintf(line0, "%02d.%02d.%02d.%02d", ip[0], ip[1], ip[2], ip[3]);
   lcdPrint(0, 0, line0, true);
@@ -972,8 +1016,9 @@ void portScanner()
       //Serial.println("'");
       //portList[a] = 1;
       
-      eeprom.WritePage(addr, (byte *)line1, sizeof(line1));
-      addr += 17;
+      eeprom.WritePage(addr, (byte *)line1, EEPROM_PAGESIZE);
+      //addr += 17;
+      addr += EEPROM_PAGESIZE;
       
       portCount++;
     }
@@ -983,37 +1028,42 @@ void portScanner()
   lcdPrint(0, 0, line0, true);
   lcdPrint(0, 1, "open ports");
   
-  if (portCount > 0)
-  {
-    delay(LONG_DELAY);
+  //if (portCount > 0)
+  //{
+    //delay(LONG_DELAY);
     
-    showEeprom(portCount);
-  }
+    //showEeprom(portCount);
+  //}
   
-  while (1)
-  {
-    readButtons();
+  //while (1)
+  //{
+  //  readButtons();
     
-    if (buttons[buttonBack] == HIGH) return;
-  }
+  //  if (buttons[buttonBack] == HIGH) return;
+  //}
+  delay(LONG_DELAY);
+  return portCount;
 }
 
 // display main menu
 void mainMenu()
 {
-  char *MainMenu[6] = { "Information", "Diagnostics", "Host Discovery", "Port Scanner", "Restart", "About" };
+  //char *MainMenu[6] = { "Information", "Diagnostics", "Host Discovery", "Port Scanner", "Restart", "About" };
+  char *MainMenu[5] = { "Information", "Diagnostics", "Host Discovery", "Port Scanner", "About" };
+  unsigned long hostcount = 0;
+  unsigned long portCount = 0;
   
-  printMenu(MainMenu, 6);
+  printMenu(MainMenu, 5);
   
   while (1)
   {
     readButtons();
      
     // up button
-    if (buttons[buttonUp] == HIGH) CursorPrevious(MainMenu, 6);
+    if (buttons[buttonUp] == HIGH) CursorPrevious(MainMenu, 5);
     
     // down button
-    if (buttons[buttonDown] == HIGH) CursorNext(MainMenu, 6);
+    if (buttons[buttonDown] == HIGH) CursorNext(MainMenu, 5);
     
     // select button
     if (buttons[buttonSelect] == HIGH)
@@ -1029,23 +1079,25 @@ void mainMenu()
           break;
           
         case 2:
-          hostDiscovery();
+          hostcount = hostDiscovery();
+          showEeprom(hostcount);
           break;
           
         case 3:
-          portScanner();
+          portCount = portScanner();
+          showEeprom(portCount);
           break;
+          
+        //case 4:
+        //  softReset();
+        //  break;
           
         case 4:
-          softReset();
-          break;
-          
-        case 5:
           aboutMenu();
           break;
       }
          
-      printMenu(MainMenu, 6);
+      printMenu(MainMenu, 5);
     }
   }
 }
@@ -1159,7 +1211,7 @@ void readButtons()
 
 void setup()
 {
-  delay(LONG_DELAY*2);
+  //delay(LONG_DELAY*2);
   
   // set the button pins to input
   pinMode(buttonUp, INPUT);
@@ -1303,7 +1355,7 @@ void loop()
   }
 }
 
-void softReset()
-{
-  asm volatile ("  jmp 0");
-}
+//void softReset()
+//{
+//  asm volatile ("  jmp 0");
+//}
