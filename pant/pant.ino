@@ -24,7 +24,9 @@
 // For reading/processing chip temperature
 // #include <avr/io.h>
 
-#define PANT_VERSION "3.3.1.9"
+#define PANT_VERSION "3.3.1.10"
+#define INFO_URL "goo.gl/HzHKn"
+/*
 #define AUTHOR "Mike Cherry"
 #define COAUTHOR "Eric Brundick"
 #define COAUTHOR2 "Blake Foster"
@@ -34,6 +36,7 @@
 #define COEMAIL2 "linux.com"
 #define COEMAIL3 "blfoster"
 #define COEMAIL4 "@vassar.edu"
+*/
 
 #define LONG_DELAY 1750
 #define MEDIUM_DELAY 500
@@ -586,7 +589,7 @@ char *eepromGetLine(int line, byte page_size = EEPROM_PAGESIZE)
   return newbuffer;
 }
 
-void showEeprom(int menuItems)
+void showEeprom(int menuItems, int offset = 0)
 {
   int menuPosition = 0;
   int buttonClick = 0;
@@ -599,12 +602,12 @@ void showEeprom(int menuItems)
     if (buttonClick == 1) buttonClick = 0;
     
     strcpy(buffer0, eepromGetLine(menuPosition));
-    lcdPrint(0, 0, buffer0, true);
+    lcdPrint(offset, 0, buffer0, true);
     
     if ((menuPosition+1) < menuItems)
     {
       strcpy(buffer1, eepromGetLine(menuPosition+1));
-      lcdPrint(0, 1, buffer1);
+      lcdPrint(offset, 1, buffer1);
     }
     
     delay(SHORT_DELAY);
@@ -644,7 +647,8 @@ void aboutMenu()
 {
   int menuPosition = 0;
   int buttonClick = 0;
-  int menuItems = 7;
+  //int menuItems = 7;
+  int menuItems = 2;
   
   while (1)
   {
@@ -658,6 +662,11 @@ void aboutMenu()
         break;
       
       case 1:
+        sprintf(line0, "More Info");
+        sprintf(line1, INFO_URL);
+        break;
+      
+      /*  
         sprintf(line0, "Designed by");
         sprintf(line1, AUTHOR);
         break;
@@ -686,6 +695,7 @@ void aboutMenu()
         sprintf(line0, COEMAIL3);
         sprintf(line1, COEMAIL4);
         break;
+      */
     }
     
     lcdPrint(0, 0, line0, true);
@@ -886,10 +896,12 @@ IPAddress ipInput(IPAddress ip)
   
   //byte ip[] = { startip[0], startip[1], startip[2], startip[3] };
   
-  sprintf(line0, "%03d.%03d.%03d.%03d", ip[0], ip[1], ip[2], ip[3]);
-  lcdPrint(0, 0, line0, true);
+  sprintf(line1, "%03d.%03d.%03d.%03d", ip[0], ip[1], ip[2], ip[3]);
+  lcdPrint(0, 0, "IP Addr", true);
+  lcdPrint(0, 1, line1);
+  
   //lcdPrint(2, 1, "^");
-  lcd.setCursor(2, 0);
+  lcd.setCursor(2, 1);
   lcd.cursor();
   lcd.blink();
   
@@ -905,8 +917,8 @@ IPAddress ipInput(IPAddress ip)
       {
         ip[octetPos]++;
         
-        sprintf(line0, "%03d", ip[octetPos]);
-        lcdPrint((octetPos+2*(octetPos+1)+octetPos)-2, 0, line0);
+        sprintf(line1, "%03d", ip[octetPos]);
+        lcdPrint((octetPos+2*(octetPos+1)+octetPos)-2, 1, line1);
         
         delay(MICRO_DELAY);
       }
@@ -918,8 +930,8 @@ IPAddress ipInput(IPAddress ip)
       {
         ip[octetPos]--;
         
-        sprintf(line0, "%03d", ip[octetPos]);
-        lcdPrint((octetPos+2*(octetPos+1)+octetPos)-2, 0, line0);
+        sprintf(line1, "%03d", ip[octetPos]);
+        lcdPrint((octetPos+2*(octetPos+1)+octetPos)-2, 1, line1);
         
         delay(MICRO_DELAY);
       }
@@ -939,11 +951,11 @@ IPAddress ipInput(IPAddress ip)
         if (octetPos != 3)
         {
           octetPos++;
-          lcdPrint(0, 1, BLANK);  
+          //lcdPrint(0, 1, BLANK);  
         }
         
         //lcdPrint(octetPos+2*(octetPos+1)+octetPos, 1, "^");
-        lcd.setCursor(octetPos+2*(octetPos+1)+octetPos, 0);
+        lcd.setCursor(octetPos+2*(octetPos+1)+octetPos, 1);
         delay(SHORT_DELAY);
       }
     }
@@ -964,7 +976,7 @@ IPAddress ipInput(IPAddress ip)
       
       //lcdPrint(0, 1, BLANK);
       //lcdPrint(octetPos+2*(octetPos+1)+octetPos, 1, "^");
-      lcd.setCursor(octetPos+2*(octetPos+1)+octetPos, 0);
+      lcd.setCursor(octetPos+2*(octetPos+1)+octetPos, 1);
       //lcd.cursor();
       
       delay(SHORT_DELAY);
@@ -1080,12 +1092,22 @@ void mainMenu()
           
         case 2:
           hostcount = hostDiscovery();
-          showEeprom(hostcount);
+          
+          if (hostcount > 0)
+          {
+            showEeprom(hostcount);
+          }
+          
           break;
           
         case 3:
           portCount = portScanner();
-          showEeprom(portCount);
+          
+          if (portCount > 0)
+          {
+            showEeprom(portCount);
+          }
+          
           break;
           
         //case 4:
