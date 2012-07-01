@@ -1,5 +1,10 @@
 (P)ortable (A)rduino (N)etwork (T)ool
-  
+
+Written and designed by Mike Cherry <mcherry@inditech.org>
+Subnet calculation code written by Eric Brundick <spirilis@linux.com>
+ICMP Ping library written by Blake Foster <blfoster@vassar.edu>
+LiquidTWI High Performance i2c LCD Library written by Matt Falcon (FalconFour) / http://falconfour.com
+
 Allows you to test the basic functionality of a network along with other tools.
   
 This was designed on a Arduino Uno Ethernet board but should work on a regular Uno + Ethernet Shield.
