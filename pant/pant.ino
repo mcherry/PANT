@@ -795,6 +795,123 @@ boolean iplist_next(byte nextip[])
   return false;
 }
 
+// enable user to enter an IP address
+// pressing back with cursor under first octet returns an ip with 0 for the first octet (canceled)
+// pressing select with cursor under last octet returns the ip that was input (selected ip)
+IPAddress ipInput(IPAddress ip, char label[], boolean isNetmask = false)
+{
+  int octetPos = 0;
+  int netMaskMax = 254;
+  
+  if (isNetmask == true)
+  {
+    netMaskMax = 255;
+  }
+  
+  //byte ip[] = { startip[0], startip[1], startip[2], startip[3] };
+  
+  sprintf(line1, "%03d.%03d.%03d.%03d", ip[0], ip[1], ip[2], ip[3]);
+  lcdPrint(0, 0, label, true);
+  lcdPrint(0, 1, line1);
+  
+  //lcdPrint(2, 1, "^");
+  lcd.setCursor(2, 1);
+  lcd.cursor();
+  lcd.blink();
+  
+  delay(SHORT_DELAY);
+  
+  while (1)
+  {
+    readButtons();
+    
+    if (buttons[buttonUp] == HIGH)
+    {
+      if (ip[octetPos] < netMaskMax)
+      {
+        ip[octetPos]++;
+      }
+      else
+      {
+        if (octetPos == 0)
+        {
+          ip[octetPos] = 1;
+        }
+        else
+        {
+          ip[octetPos] = 0;
+        }
+      }
+      
+      sprintf(line1, "%03d", ip[octetPos]);
+      lcdPrint((octetPos+2*(octetPos+1)+octetPos)-2, 1, line1);
+      
+      delay(MICRO_DELAY);
+    }
+    
+    if (buttons[buttonDown] == HIGH)
+    {
+      if (ip[octetPos] > 0)
+      {
+        ip[octetPos]--;
+      }
+      else
+      {
+        ip[octetPos] = netMaskMax;
+      }
+      
+      sprintf(line1, "%03d", ip[octetPos]);
+      lcdPrint((octetPos+2*(octetPos+1)+octetPos)-2, 1, line1);
+      delay(MICRO_DELAY);
+    }
+    
+    if (buttons[buttonSelect] == HIGH)
+    {
+      if (octetPos == 3)
+      {
+        lcd.noBlink();
+        lcd.noCursor();
+        return ip;
+      }
+      
+      if (octetPos < 4)
+      {
+        if (octetPos != 3)
+        {
+          octetPos++;
+          //lcdPrint(0, 1, BLANK);  
+        }
+        
+        //lcdPrint(octetPos+2*(octetPos+1)+octetPos, 1, "^");
+        lcd.setCursor(octetPos+2*(octetPos+1)+octetPos, 1);
+        delay(SHORT_DELAY);
+      }
+    }
+    
+    if (buttons[buttonBack] == HIGH)
+    {
+      if (octetPos == 0)
+      {
+        ip[0] = 0;
+        
+        lcd.noBlink();
+        lcd.noCursor();
+        
+        return ip;
+      }
+      
+      octetPos--;
+      
+      //lcdPrint(0, 1, BLANK);
+      //lcdPrint(octetPos+2*(octetPos+1)+octetPos, 1, "^");
+      lcd.setCursor(octetPos+2*(octetPos+1)+octetPos, 1);
+      //lcd.cursor();
+      
+      delay(SHORT_DELAY);
+    }
+  }
+}
+
 // discover hosts responding to ping on the network
 // based on netmask and ip address
 int hostDiscovery()
@@ -812,7 +929,22 @@ int hostDiscovery()
   
   // convert IPAddress's into byte arrays
   byte IPAsByte[] = { myLocalIp[0], myLocalIp[1], myLocalIp[2], myLocalIp[3] };
-  byte NMAsByte[] = { mySubnetMask[0], mySubnetMask[1], mySubnetMask[2], mySubnetMask[3] };
+  //byte NMAsByte[] = { mySubnetMask[0], mySubnetMask[1], mySubnetMask[2], mySubnetMask[3] };
+  byte NMAsByte[4];
+  
+  IPAddress subnetmask_default = ipInput(mySubnetMask, "Netmask", true);
+  if (subnetmask_default[0] == 0)
+  {
+    return 0;
+  }
+  else
+  {
+    NMAsByte[0] = subnetmask_default[0];
+    NMAsByte[1] = subnetmask_default[1];
+    NMAsByte[2] = subnetmask_default[2];
+    NMAsByte[3] = subnetmask_default[3];
+  }
+  
   
   // setup the netrange list
   iplist_define(IPAsByte, NMAsByte);
@@ -887,103 +1019,6 @@ int hostDiscovery()
   return hostcount;
 }
 
-// enable user to enter an IP address
-// pressing back with cursor under first octet returns an ip with 0 for the first octet (canceled)
-// pressing select with cursor under last octet returns the ip that was input (selected ip)
-IPAddress ipInput(IPAddress ip)
-{
-  int octetPos = 0;
-  
-  //byte ip[] = { startip[0], startip[1], startip[2], startip[3] };
-  
-  sprintf(line1, "%03d.%03d.%03d.%03d", ip[0], ip[1], ip[2], ip[3]);
-  lcdPrint(0, 0, "IP Addr", true);
-  lcdPrint(0, 1, line1);
-  
-  //lcdPrint(2, 1, "^");
-  lcd.setCursor(2, 1);
-  lcd.cursor();
-  lcd.blink();
-  
-  delay(SHORT_DELAY);
-  
-  while (1)
-  {
-    readButtons();
-    
-    if (buttons[buttonUp] == HIGH)
-    {
-      if (ip[octetPos] < 254)
-      {
-        ip[octetPos]++;
-        
-        sprintf(line1, "%03d", ip[octetPos]);
-        lcdPrint((octetPos+2*(octetPos+1)+octetPos)-2, 1, line1);
-        
-        delay(MICRO_DELAY);
-      }
-    }
-    
-    if (buttons[buttonDown] == HIGH)
-    {
-      if (ip[octetPos] > 0)
-      {
-        ip[octetPos]--;
-        
-        sprintf(line1, "%03d", ip[octetPos]);
-        lcdPrint((octetPos+2*(octetPos+1)+octetPos)-2, 1, line1);
-        
-        delay(MICRO_DELAY);
-      }
-    }
-    
-    if (buttons[buttonSelect] == HIGH)
-    {
-      if (octetPos == 3)
-      {
-        lcd.noBlink();
-        lcd.noCursor();
-        return ip;
-      }
-      
-      if (octetPos < 4)
-      {
-        if (octetPos != 3)
-        {
-          octetPos++;
-          //lcdPrint(0, 1, BLANK);  
-        }
-        
-        //lcdPrint(octetPos+2*(octetPos+1)+octetPos, 1, "^");
-        lcd.setCursor(octetPos+2*(octetPos+1)+octetPos, 1);
-        delay(SHORT_DELAY);
-      }
-    }
-    
-    if (buttons[buttonBack] == HIGH)
-    {
-      if (octetPos == 0)
-      {
-        ip[0] = 0;
-        
-        lcd.noBlink();
-        lcd.noCursor();
-        
-        return ip;
-      }
-      
-      octetPos--;
-      
-      //lcdPrint(0, 1, BLANK);
-      //lcdPrint(octetPos+2*(octetPos+1)+octetPos, 1, "^");
-      lcd.setCursor(octetPos+2*(octetPos+1)+octetPos, 1);
-      //lcd.cursor();
-      
-      delay(SHORT_DELAY);
-    }
-  }
-}
-
 int portScanner()
 {
   IPAddress ip;
@@ -994,7 +1029,7 @@ int portScanner()
   
   int portCount = 0;
   
-  ip = ipInput(myLocalIp);
+  ip = ipInput(myLocalIp, "IP Addr");
   if (ip[0] == 0) return 0;
   
   sprintf(line0, "%02d.%02d.%02d.%02d", ip[0], ip[1], ip[2], ip[3]);
